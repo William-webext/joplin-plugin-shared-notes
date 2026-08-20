@@ -6,7 +6,6 @@ joplin.plugins.register({
         const panel = await joplin.views.panels.create('shared_notes_panel');
 
         async function fetchSharedNotes() {
-            // 1. Recupera tutti i taccuini
             const allFolders: any[] = [];
             let page = 1;
             let hasMore = true;
@@ -31,7 +30,6 @@ joplin.plugins.register({
 
             const sharedFolderIds = new Set(allFolders.filter(f => isSharedFolder(f)).map(f => f.id));
 
-            // 2. Recupera gli ID di note/taccuini con link di condivisione pubblici
             const publicNoteIds = new Set<string>();
             try {
                 const sharesRes = await joplin.data.get(['shares']);
@@ -45,7 +43,6 @@ joplin.plugins.register({
                 // Endpoint shares non disponibile o vuoto
             }
 
-            // 3. Scansiona tutte le note per trovare sia quelle in taccuini condivisi sia quelle singole
             const sharedNotesMap = new Map<string, any>();
             let notePage = 1;
             let noteHasMore = true;
@@ -62,16 +59,16 @@ joplin.plugins.register({
                     const isIndividuallyShared = publicNoteIds.has(note.id) || note.is_shared === 1;
 
                     if (belongsToSharedFolder || isIndividuallyShared) {
-                        let shareType = '👥 Specific User(s)';
-                        if (isIndividuallyShared || publicNoteIds.has(note.id)) {
-                            shareType = '🌐 Public Link (World)';
-                        }
+                        const isPublic = isIndividuallyShared || publicNoteIds.has(note.id);
+                        const shareType = isPublic ? 'public' : 'users';
+                        const shareLabel = isPublic ? '🌐 Public Link' : '👥 Specific User(s)';
 
                         sharedNotesMap.set(note.id, {
                             id: note.id,
                             title: note.title || 'Untitled',
                             folderTitle: folder ? folder.title : 'Unknown',
-                            shareType: shareType
+                            shareType: shareType,
+                            shareLabel: shareLabel
                         });
                     }
                 }
@@ -90,7 +87,7 @@ joplin.plugins.register({
             const notes = await fetchSharedNotes();
 
             let itemsHtml = notes.map(n => `
-                <li style="margin-bottom: 10px; font-size: 13px; border-bottom: 1px dashed var(--joplin-divider-color, #444); padding-bottom: 6px;">
+                <li class="note-item" data-type="${n.shareType}" data-search="${escapeHtml((n.title + ' ' + n.folderTitle).toLowerCase())}" style="margin-bottom: 10px; font-size: 13px; border-bottom: 1px dashed var(--joplin-divider-color, #444); padding-bottom: 6px;">
                     <a href="#" onclick="webviewApi.postMessage({ name: 'openNote', id: '${n.id}' }); return false;" 
                        style="color: var(--joplin-url-color, #4a90e2); text-decoration: none; font-weight: bold;">
                         📄 ${escapeHtml(n.title)}
@@ -100,7 +97,7 @@ joplin.plugins.register({
                     </div>
                     <div style="font-size: 10px; margin-top: 3px;">
                         <span style="background: rgba(127,127,127,0.15); padding: 2px 6px; border-radius: 3px; font-weight: 500;">
-                            ${escapeHtml(n.shareType)}
+                            ${escapeHtml(n.shareLabel)}
                         </span>
                     </div>
                 </li>
@@ -108,18 +105,64 @@ joplin.plugins.register({
 
             if (notes.length === 0) {
                 itemsHtml = '<li style="font-size: 13px; color: #888;">No shared notes found.</li>';
+            } else {
+                itemsHtml += '<li id="no-results" style="font-size: 13px; color: #888; display: none; padding: 8px 0;">No matching notes found.</li>';
             }
 
             const html = `
                 <div style="padding: 12px; font-family: sans-serif; color: var(--joplin-color);">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid var(--joplin-divider-color, #ccc); padding-bottom: 8px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                         <h3 style="margin: 0; font-size: 14px;">👥 Shared Notes (${notes.length})</h3>
-                        <button onclick="webviewApi.postMessage({ name: 'refresh' })" title="Refresh" style="padding: 3px 8px; cursor: pointer; border-radius: 4px; border: 1px solid #ccc; background: transparent; color: inherit;">🔄</button>
+                        <button onclick="webviewApi.postMessage({ name: 'refresh' })" title="Refresh" style="padding: 3px 8px; cursor: pointer; border-radius: 4px; border: 1px solid var(--joplin-divider-color, #ccc); background: transparent; color: inherit;">🔄</button>
                     </div>
-                    <ul style="list-style: none; padding-left: 0; margin: 0;">
+
+                    <!-- Search and Filter Bar -->
+                    <div style="margin-bottom: 12px; display: flex; flex-direction: column; gap: 6px;">
+                        <input type="text" id="searchInput" placeholder="Search note or notebook..." 
+                            style="width: 100%; box-sizing: border-box; padding: 6px 8px; border-radius: 4px; border: 1px solid var(--joplin-divider-color, #ccc); background: var(--joplin-background-color, #fff); color: var(--joplin-color); font-size: 12px;"
+                            oninput="filterNotes()" />
+                        
+                        <select id="typeFilter" onchange="filterNotes()" 
+                            style="width: 100%; box-sizing: border-box; padding: 5px 6px; border-radius: 4px; border: 1px solid var(--joplin-divider-color, #ccc); background: var(--joplin-background-color, #fff); color: var(--joplin-color); font-size: 12px;">
+                            <option value="all">All Shared Types</option>
+                            <option value="users">👥 Specific User(s)</option>
+                            <option value="public">🌐 Public Link</option>
+                        </select>
+                    </div>
+
+                    <ul id="notesList" style="list-style: none; padding-left: 0; margin: 0;">
                         ${itemsHtml}
                     </ul>
                 </div>
+
+                <script>
+                    function filterNotes() {
+                        const searchText = document.getElementById('searchInput').value.toLowerCase().trim();
+                        const filterType = document.getElementById('typeFilter').value;
+                        const items = document.querySelectorAll('.note-item');
+                        let visibleCount = 0;
+
+                        items.forEach(item => {
+                            const searchData = item.getAttribute('data-search') || '';
+                            const itemType = item.getAttribute('data-type');
+
+                            const matchesSearch = searchText === '' || searchData.includes(searchText);
+                            const matchesType = filterType === 'all' || itemType === filterType;
+
+                            if (matchesSearch && matchesType) {
+                                item.style.display = '';
+                                visibleCount++;
+                            } else {
+                                item.style.display = 'none';
+                            }
+                        });
+
+                        const noResults = document.getElementById('no-results');
+                        if (noResults) {
+                            noResults.style.display = (visibleCount === 0 && items.length > 0) ? 'block' : 'none';
+                        }
+                    }
+                </script>
             `;
 
             await joplin.views.panels.setHtml(panel, html);
