@@ -6,6 +6,7 @@ joplin.plugins.register({
         const panel = await joplin.views.panels.create('shared_notes_panel');
 
         async function fetchSharedNotes() {
+            // 1. Recupera tutti i taccuini
             const allFolders: any[] = [];
             let page = 1;
             let hasMore = true;
@@ -28,44 +29,56 @@ joplin.plugins.register({
                 return false;
             }
 
-            let publicNoteIds = new Set<string>();
+            const sharedFolderIds = new Set(allFolders.filter(f => isSharedFolder(f)).map(f => f.id));
+
+            // 2. Recupera gli ID di note/taccuini con link di condivisione pubblici
+            const publicNoteIds = new Set<string>();
             try {
                 const sharesRes = await joplin.data.get(['shares']);
                 if (sharesRes && sharesRes.items) {
                     sharesRes.items.forEach((s: any) => {
                         if (s.note_id) publicNoteIds.add(s.note_id);
+                        if (s.folder_id) sharedFolderIds.add(s.folder_id);
                     });
                 }
             } catch (e) {
-                // Endpoint shares non disponibile su tutte le configurazioni
+                // Endpoint shares non disponibile o vuoto
             }
 
-            const sharedFolderIds = allFolders.filter(f => isSharedFolder(f)).map(f => f.id);
-            const sharedNotes: any[] = [];
+            // 3. Scansiona tutte le note per trovare sia quelle in taccuini condivisi sia quelle singole
+            const sharedNotesMap = new Map<string, any>();
+            let notePage = 1;
+            let noteHasMore = true;
 
-            for (const folderId of sharedFolderIds) {
-                let notePage = 1;
-                let noteHasMore = true;
-                while (noteHasMore) {
-                    const res = await joplin.data.get(['folders', folderId, 'notes'], {
-                        fields: ['id', 'title', 'parent_id', 'is_shared'],
-                        page: notePage++,
-                    });
-                    for (const note of res.items) {
-                        const folder = folderMap.get(note.parent_id);
-                        const isPublic = publicNoteIds.has(note.id) || note.is_shared === 1;
-                        
-                        sharedNotes.push({
+            while (noteHasMore) {
+                const res = await joplin.data.get(['notes'], {
+                    fields: ['id', 'title', 'parent_id', 'is_shared'],
+                    page: notePage++,
+                });
+
+                for (const note of res.items) {
+                    const folder = folderMap.get(note.parent_id);
+                    const belongsToSharedFolder = sharedFolderIds.has(note.parent_id);
+                    const isIndividuallyShared = publicNoteIds.has(note.id) || note.is_shared === 1;
+
+                    if (belongsToSharedFolder || isIndividuallyShared) {
+                        let shareType = '👥 Specific User(s)';
+                        if (isIndividuallyShared || publicNoteIds.has(note.id)) {
+                            shareType = '🌐 Public Link (World)';
+                        }
+
+                        sharedNotesMap.set(note.id, {
                             id: note.id,
                             title: note.title || 'Untitled',
                             folderTitle: folder ? folder.title : 'Unknown',
-                            shareType: isPublic ? '🌐 Public Link (World)' : '👥 Specific User(s)'
+                            shareType: shareType
                         });
                     }
-                    noteHasMore = res.has_more;
                 }
+                noteHasMore = res.has_more;
             }
-            return sharedNotes;
+
+            return Array.from(sharedNotesMap.values());
         }
 
         async function renderPanel() {
