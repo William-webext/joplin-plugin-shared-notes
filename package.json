@@ -1,6 +1,7 @@
 {
   "name": "joplin-plugin-shared-notes-panel",
   "version": "1.0.0",
+  "app_min_version": "2.8.0",
   "scripts": {
     "dist": "webpack --env joplin-plugin-config=buildMain && webpack --env joplin-plugin-config=buildExtraScripts && webpack --env joplin-plugin-config=createArchive",
     "prepare": "npm run dist",
@@ -25,5 +26,9 @@
     "typescript": "^4.8.2",
     "webpack": "^5.74.0",
     "webpack-cli": "^4.10.0"
-  }
+  },
+  "repository": {
+  "type": "git",
+  "url": "https://github.com/William-webext/joplin-plugin-shared-notes.git"
+}
 }
