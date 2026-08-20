@@ -1,0 +1,16 @@
+{
+	"manifest_version": 1,
+	"id": "com.william.sharednotes",
+	"app_min_version": "3.7",
+	"version": "1.0.0",
+	"name": "Shared Notes Panel",
+	"description": "Show the list of notes in shared notebooks",
+	"author": "William Baglioni",
+	"homepage_url": "",
+	"repository_url": "",
+	"keywords": [],
+	"categories": [],
+	"screenshots": [],
+	"icons": {},
+	"promo_tile": {}
+}
