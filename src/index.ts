@@ -49,7 +49,7 @@ joplin.plugins.register({
 
             while (noteHasMore) {
                 const res = await joplin.data.get(['notes'], {
-                    fields: ['id', 'title', 'parent_id', 'is_shared'],
+                    fields: ['id', 'title', 'parent_id', 'is_shared', 'user_updated_time', 'updated_time'],
                     page: notePage++,
                 });
 
@@ -62,13 +62,15 @@ joplin.plugins.register({
                         const isPublic = isIndividuallyShared || publicNoteIds.has(note.id);
                         const shareType = isPublic ? 'public' : 'users';
                         const shareLabel = isPublic ? '🌐 Public Link' : '👥 Specific User(s)';
+                        const updatedTime = note.user_updated_time || note.updated_time || 0;
 
                         sharedNotesMap.set(note.id, {
                             id: note.id,
                             title: note.title || 'Untitled',
                             folderTitle: folder ? folder.title : 'Unknown',
                             shareType: shareType,
-                            shareLabel: shareLabel
+                            shareLabel: shareLabel,
+                            updatedTime: updatedTime
                         });
                     }
                 }
@@ -86,90 +88,113 @@ joplin.plugins.register({
             
             const notes = await fetchSharedNotes();
 
-            let itemsHtml = notes.map(n => `
-                <li class="note-item" data-type="${n.shareType}" data-search="${escapeHtml((n.title + ' ' + n.folderTitle).toLowerCase())}" style="margin-bottom: 10px; font-size: 13px; border-bottom: 1px dashed var(--joplin-divider-color, #444); padding-bottom: 6px;">
-                    <a href="#" onclick="webviewApi.postMessage({ name: 'openNote', id: '${n.id}' }); return false;" 
-                       style="color: var(--joplin-url-color, #4a90e2); text-decoration: none; font-weight: bold;">
-                        📄 ${escapeHtml(n.title)}
-                    </a>
-                    <div style="font-size: 11px; color: var(--joplin-color3, #888); margin-top: 3px;">
-                        📂 ${escapeHtml(n.folderTitle)}
-                    </div>
-                    <div style="font-size: 10px; margin-top: 3px;">
-                        <span style="background: rgba(127,127,127,0.15); padding: 2px 6px; border-radius: 3px; font-weight: 500;">
-                            ${escapeHtml(n.shareLabel)}
-                        </span>
-                    </div>
-                </li>
-            `).join('');
-
-            if (notes.length === 0) {
-                itemsHtml = '<li style="font-size: 13px; color: #888;">No shared notes found.</li>';
-            } else {
-                itemsHtml += '<li id="no-results" style="font-size: 13px; color: #888; display: none; padding: 8px 0;">No matching notes found.</li>';
-            }
-
             const html = `
                 <div style="padding: 12px; font-family: sans-serif; color: var(--joplin-color);">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                         <h3 style="margin: 0; font-size: 14px;">👥 Shared Notes (${notes.length})</h3>
-                        <button onclick="webviewApi.postMessage({ name: 'refresh' })" title="Refresh" style="padding: 3px 8px; cursor: pointer; border-radius: 4px; border: 1px solid var(--joplin-divider-color, #ccc); background: transparent; color: inherit;">🔄</button>
+                        <button id="refreshBtn" title="Refresh" style="padding: 3px 8px; cursor: pointer; border-radius: 4px; border: 1px solid var(--joplin-divider-color, #ccc); background: transparent; color: inherit;">🔄</button>
                     </div>
 
-                    <!-- Search and Filter Bar -->
+                    <!-- Filter & Sort Controls -->
                     <div style="margin-bottom: 12px; display: flex; flex-direction: column; gap: 6px;">
-                        <input type="text" id="searchInput" placeholder="Search note or notebook..." 
-                            style="width: 100%; box-sizing: border-box; padding: 6px 8px; border-radius: 4px; border: 1px solid var(--joplin-divider-color, #ccc); background: var(--joplin-background-color, #fff); color: var(--joplin-color); font-size: 12px;"
-                            oninput="filterNotes()" />
+                        <input type="text" id="searchInput" placeholder="Search (e.g. pi)..." 
+                            style="width: 100%; box-sizing: border-box; padding: 6px 8px; border-radius: 4px; border: 1px solid var(--joplin-divider-color, #ccc); background: var(--joplin-background-color, #fff); color: var(--joplin-color); font-size: 12px;" />
                         
-                        <select id="typeFilter" onchange="filterNotes()" 
-                            style="width: 100%; box-sizing: border-box; padding: 5px 6px; border-radius: 4px; border: 1px solid var(--joplin-divider-color, #ccc); background: var(--joplin-background-color, #fff); color: var(--joplin-color); font-size: 12px;">
-                            <option value="all">All Shared Types</option>
-                            <option value="users">👥 Specific User(s)</option>
-                            <option value="public">🌐 Public Link</option>
-                        </select>
+                        <div style="display: flex; gap: 6px;">
+                            <select id="typeFilter" 
+                                style="flex: 1; box-sizing: border-box; padding: 5px 6px; border-radius: 4px; border: 1px solid var(--joplin-divider-color, #ccc); background: var(--joplin-background-color, #fff); color: var(--joplin-color); font-size: 11px;">
+                                <option value="all">All Shared</option>
+                                <option value="users">👥 Users</option>
+                                <option value="public">🌐 Public Link</option>
+                            </select>
+
+                            <select id="sortFilter" 
+                                style="flex: 1; box-sizing: border-box; padding: 5px 6px; border-radius: 4px; border: 1px solid var(--joplin-divider-color, #ccc); background: var(--joplin-background-color, #fff); color: var(--joplin-color); font-size: 11px;">
+                                <option value="title-asc">Title (A-Z)</option>
+                                <option value="title-desc">Title (Z-A)</option>
+                                <option value="date-desc">Date (Newest)</option>
+                                <option value="date-asc">Date (Oldest)</option>
+                            </select>
+                        </div>
                     </div>
 
-                    <ul id="notesList" style="list-style: none; padding-left: 0; margin: 0;">
-                        ${itemsHtml}
-                    </ul>
+                    <ul id="notesList" style="list-style: none; padding-left: 0; margin: 0;"></ul>
                 </div>
 
                 <script>
-                    function filterNotes() {
-                        const searchText = document.getElementById('searchInput').value.toLowerCase().trim();
-                        const filterType = document.getElementById('typeFilter').value;
-                        const items = document.querySelectorAll('.note-item');
-                        let visibleCount = 0;
+                    const notesData = ${JSON.stringify(notes).replace(/</g, '\\u003c')};
 
-                        items.forEach(item => {
-                            const searchData = item.getAttribute('data-search') || '';
-                            const itemType = item.getAttribute('data-type');
+                    function escapeHtml(text) {
+                        return (text || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+                    }
 
-                            const matchesSearch = searchText === '' || searchData.includes(searchText);
-                            const matchesType = filterType === 'all' || itemType === filterType;
+                    function updateList() {
+                        const search = (document.getElementById('searchInput').value || '').toLowerCase().trim();
+                        const type = document.getElementById('typeFilter').value;
+                        const sort = document.getElementById('sortFilter').value;
 
-                            if (matchesSearch && matchesType) {
-                                item.style.display = '';
-                                visibleCount++;
-                            } else {
-                                item.style.display = 'none';
-                            }
+                        // 1. Corrispondenza parziale e filtro tipo
+                        let filtered = notesData.filter(n => {
+                            const matchesSearch = !search || 
+                                n.title.toLowerCase().includes(search) || 
+                                n.folderTitle.toLowerCase().includes(search);
+                            const matchesType = type === 'all' || n.shareType === type;
+                            return matchesSearch && matchesType;
                         });
 
-                        const noResults = document.getElementById('no-results');
-                        if (noResults) {
-                            noResults.style.display = (visibleCount === 0 && items.length > 0) ? 'block' : 'none';
+                        // 2. Ordinamento
+                        filtered.sort((a, b) => {
+                            if (sort === 'title-asc') return a.title.localeCompare(b.title);
+                            if (sort === 'title-desc') return b.title.localeCompare(a.title);
+                            if (sort === 'date-desc') return b.updatedTime - a.updatedTime;
+                            if (sort === 'date-asc') return a.updatedTime - b.updatedTime;
+                            return 0;
+                        });
+
+                        // 3. Render
+                        const ul = document.getElementById('notesList');
+                        if (filtered.length === 0) {
+                            ul.innerHTML = '<li style="font-size: 13px; color: #888; padding: 8px 0;">No matching notes found.</li>';
+                            return;
                         }
+
+                        ul.innerHTML = filtered.map(n => {
+                            let dateStr = '';
+                            if (n.updatedTime) {
+                                const d = new Date(n.updatedTime);
+                                dateStr = ' • 🕒 ' + d.toLocaleDateString();
+                            }
+                            return \`
+                                <li style="margin-bottom: 10px; font-size: 13px; border-bottom: 1px dashed var(--joplin-divider-color, #444); padding-bottom: 6px;">
+                                    <a href="#" onclick="webviewApi.postMessage({ name: 'openNote', id: '\${n.id}' }); return false;" 
+                                       style="color: var(--joplin-url-color, #4a90e2); text-decoration: none; font-weight: bold;">
+                                        📄 \${escapeHtml(n.title)}
+                                    </a>
+                                    <div style="font-size: 11px; color: var(--joplin-color3, #888); margin-top: 3px;">
+                                        📂 \${escapeHtml(n.folderTitle)}\${dateStr}
+                                    </div>
+                                    <div style="font-size: 10px; margin-top: 3px;">
+                                        <span style="background: rgba(127,127,127,0.15); padding: 2px 6px; border-radius: 3px; font-weight: 500;">
+                                            \${escapeHtml(n.shareLabel)}
+                                        </span>
+                                    </div>
+                                </li>
+                            \`;
+                        }).join('');
                     }
+
+                    document.getElementById('searchInput').addEventListener('input', updateList);
+                    document.getElementById('typeFilter').addEventListener('change', updateList);
+                    document.getElementById('sortFilter').addEventListener('change', updateList);
+                    document.getElementById('refreshBtn').addEventListener('click', () => {
+                        webviewApi.postMessage({ name: 'refresh' });
+                    });
+
+                    updateList();
                 </script>
             `;
 
             await joplin.views.panels.setHtml(panel, html);
-        }
-
-        function escapeHtml(text: string) {
-            return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
         }
 
         await joplin.commands.register({
