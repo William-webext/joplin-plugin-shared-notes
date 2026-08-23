@@ -127,20 +127,34 @@ joplin.plugins.register({
             }
 
             const html = `
-                <div style="padding: 12px; font-family: sans-serif; color: var(--joplin-color); box-sizing: border-box;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                        <h3 style="margin: 0; font-size: 14px;">👥 Shared Notes (${notes.length})</h3>
+                <style>
+                    /* Struttura Flexbox per abilitare lo scorrimento indipendente */
+                    .panel-container { height: 100vh; display: flex; flex-direction: column; padding: 12px; box-sizing: border-box; color: var(--joplin-color); font-family: sans-serif; }
+                    .panel-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--joplin-divider-color, #3a3f45); padding-bottom: 8px; margin-bottom: 12px; flex-shrink: 0; }
+                    .panel-controls { margin-bottom: 12px; display: flex; gap: 6px; flex-shrink: 0; }
+                    .panel-scroll-area { overflow-y: auto; flex-grow: 1; padding-right: 4px; display: flex; flex-direction: column; gap: 10px; }
+                    
+                    /* Scrollbar personalizzata per un look pulito */
+                    ::-webkit-scrollbar { width: 6px; }
+                    ::-webkit-scrollbar-track { background: transparent; }
+                    ::-webkit-scrollbar-thumb { background: var(--joplin-divider-color, #555); border-radius: 3px; }
+                    ::-webkit-scrollbar-thumb:hover { background: #777; }
+                </style>
+
+                <div class="panel-container">
+                    <div class="panel-header">
+                        <h3 style="margin: 0; font-size: 14px;">👥 Shared Notes (<span id="totalCount">${notes.length}</span>)</h3>
                         <button onclick="webviewApi.postMessage({ name: 'refresh' })" title="Refresh" style="padding: 3px 8px; cursor: pointer; border-radius: 4px; border: 1px solid var(--joplin-divider-color, #ccc); background: transparent; color: inherit;">🔄</button>
                     </div>
 
                     <!-- Search & Sort Controls -->
-                    <div style="margin-bottom: 12px; display: flex; gap: 6px;">
+                    <div class="panel-controls">
                         <input type="text" id="searchInput" placeholder="Search (e.g. pippo)..." 
                             oninput="window.updatePanel && window.updatePanel()"
-                            style="flex: 2; box-sizing: border-box; padding: 5px 8px; border-radius: 4px; border: 1px solid var(--joplin-divider-color, #ccc); background: var(--joplin-background-color, #fff); color: var(--joplin-color); font-size: 11px;" />
+                            style="flex: 2; box-sizing: border-box; padding: 5px 8px; border-radius: 4px; border: 1px solid var(--joplin-divider-color, #ccc); background: var(--joplin-background-color, #fff); color: var(--joplin-color); font-size: 11px; outline: none;" />
                         
                         <select id="sortFilter" onchange="window.updatePanel && window.updatePanel()"
-                            style="flex: 1; box-sizing: border-box; padding: 5px 4px; border-radius: 4px; border: 1px solid var(--joplin-divider-color, #ccc); background: var(--joplin-background-color, #fff); color: var(--joplin-color); font-size: 11px;">
+                            style="flex: 1; box-sizing: border-box; padding: 5px 4px; border-radius: 4px; border: 1px solid var(--joplin-divider-color, #ccc); background: var(--joplin-background-color, #fff); color: var(--joplin-color); font-size: 11px; outline: none;">
                             <option value="date-desc">Date (Newest)</option>
                             <option value="date-asc">Date (Oldest)</option>
                             <option value="title-asc">Title (A-Z)</option>
@@ -148,10 +162,10 @@ joplin.plugins.register({
                         </select>
                     </div>
 
-                    <!-- Collapsible Sections -->
-                    <div style="display: flex; flex-direction: column; gap: 10px;">
+                    <!-- Collapsible Sections - Ora con scorrimento -->
+                    <div class="panel-scroll-area">
                         <!-- Section 1: Specific Users -->
-                        <details open style="border: 1px solid var(--joplin-divider-color, #444); border-radius: 4px; padding: 6px 8px; background: rgba(127,127,127,0.05);">
+                        <details open style="border: 1px solid var(--joplin-divider-color, #444); border-radius: 4px; padding: 6px 8px; background: rgba(127,127,127,0.05); flex-shrink: 0;">
                             <summary style="cursor: pointer; font-weight: bold; font-size: 12px; user-select: none;">
                                 👥 Specific User(s) (<span id="usersCount">${usersNotes.length}</span>)
                             </summary>
@@ -161,7 +175,7 @@ joplin.plugins.register({
                         </details>
 
                         <!-- Section 2: Public Links -->
-                        <details open style="border: 1px solid var(--joplin-divider-color, #444); border-radius: 4px; padding: 6px 8px; background: rgba(127,127,127,0.05);">
+                        <details open style="border: 1px solid var(--joplin-divider-color, #444); border-radius: 4px; padding: 6px 8px; background: rgba(127,127,127,0.05); flex-shrink: 0;">
                             <summary style="cursor: pointer; font-weight: bold; font-size: 12px; user-select: none;">
                                 🌐 Public Link (<span id="publicCount">${publicNotes.length}</span>)
                             </summary>
@@ -176,6 +190,7 @@ joplin.plugins.register({
                     window.updatePanel = function() {
                         var search = (document.getElementById('searchInput').value || '').toLowerCase().trim();
                         var sort = document.getElementById('sortFilter').value;
+                        var totalVisibleCount = 0;
 
                         ['usersList', 'publicList'].forEach(function(listId) {
                             var list = document.getElementById(listId);
@@ -193,6 +208,7 @@ joplin.plugins.register({
                                 if (matchesSearch) {
                                     item.style.display = '';
                                     visibleCount++;
+                                    totalVisibleCount++;
                                 } else {
                                     item.style.display = 'none';
                                 }
@@ -212,6 +228,9 @@ joplin.plugins.register({
                             var badge = document.getElementById(countBadgeId);
                             if (badge) badge.innerText = visibleCount;
                         });
+
+                        var totalBadge = document.getElementById('totalCount');
+                        if (totalBadge) totalBadge.innerText = totalVisibleCount;
                     };
                     window.updatePanel();
                 " />
