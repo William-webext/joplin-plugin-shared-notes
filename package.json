@@ -1,6 +1,6 @@
 {
   "name": "joplin-plugin-shared-notes-william",
-  "version": "1.0.14",
+  "version": "1.0.15",
   "app_min_version": "2.8.0",
   "scripts": {
     "dist": "webpack --env joplin-plugin-config=buildMain && webpack --env joplin-plugin-config=buildExtraScripts && webpack --env joplin-plugin-config=createArchive",
@@ -8,7 +8,7 @@
     "updateVersion": "webpack --env joplin-plugin-config=updateVersion",
     "update": "npm install -g generator-joplin && yo joplin --node-package-manager npm --update --force"
   },
-  "license": "MIT",
+  "license": "AGPL-3.0",
   "keywords": [
     "joplin-plugin"
   ],

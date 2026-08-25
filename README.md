@@ -1,5 +1,8 @@
 # Joplin Published Notes Panel
 
+![Version](https://img.shields.io/npm/v/joplin-plugin-shared-notes-william)
+![License](https://img.shields.io/badge/license-AGPL--3.0-blue)
+
 A Joplin plugin that provides a clean, dedicated sidebar panel to track, search, and manage all your publicly shared notes in one place.
 
 ## Features
@@ -18,7 +21,7 @@ A Joplin plugin that provides a clean, dedicated sidebar panel to track, search,
 2. Search for `Published Notes Panel` and click Install.
 3. Restart Joplin.
 
-*(Alternatively, you can download the `.jpl` file from the [Releases](link-to-your-releases) page and install it manually via the gear icon in the Plugins menu).*
+*(Alternatively, you can download the `.jpl` file from the [Releases](https://github.com/William-webext/joplin-plugin-shared-notes/releases) page and install it manually via the gear icon in the Plugins menu).*
 
 ## Usage
 
@@ -27,6 +30,13 @@ A Joplin plugin that provides a clean, dedicated sidebar panel to track, search,
 * Click on any note title in the panel to instantly open it in your main editor.
 * Use the "Refresh" button to sync the panel if you've recently shared or unshared notes outside the panel.
 
+## Support This Project
+
+If you find this plugin useful, consider buying me a coffee to support
+continued development and maintenance:
+
+[![Donate with PayPal](https://img.shields.io/badge/Donate-PayPal-00457C?logo=paypal&logoColor=white)](https://paypal.me/webext)
+
 ## License
 
-MIT
+AGPL-3.0
